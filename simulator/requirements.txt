@@ -1,0 +1,10 @@
+# OpenBAS Intelligence — Building Simulator Dependencies
+# Physics-based HVAC/BAS building simulator
+
+# MQTT client for publishing telemetry to Mosquitto
+paho-mqtt>=1.6.1
+
+# Testing
+pytest>=8.3.0
+pytest-cov>=5.0.0
+

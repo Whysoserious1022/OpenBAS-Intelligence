@@ -1,0 +1,83 @@
+name: OpenBAS Intelligence CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # 1. Java Backend Build & Test
+  # ──────────────────────────────────────────────────────────
+  backend:
+    name: Backend (Java 21 / Spring Boot)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Compile and Test Backend
+        working-directory: backend
+        run: mvn clean test -B --no-transfer-progress
+
+  # ──────────────────────────────────────────────────────────
+  # 2. Python AI Service & Simulator Tests
+  # ──────────────────────────────────────────────────────────
+  ai-and-simulator:
+    name: AI Service & Simulator (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install AI Dependencies
+        working-directory: ai-service
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run AI Agent & Orchestrator Tests
+        working-directory: ai-service
+        run: pytest tests/test_agents.py -v
+
+      - name: Run Simulator Tests
+        working-directory: simulator
+        run: pytest tests/test_simulator.py -v
+
+  # ──────────────────────────────────────────────────────────
+  # 3. Frontend Build & Typecheck
+  # ──────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend (React / TypeScript / Vite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package.json
+
+      - name: Install Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript Compile & Build
+        working-directory: frontend
+        run: npm run build
+

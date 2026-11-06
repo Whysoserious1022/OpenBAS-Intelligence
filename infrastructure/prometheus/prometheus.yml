@@ -1,0 +1,33 @@
+# Prometheus configuration for OpenBAS Intelligence
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    platform: openbas-intelligence
+
+rule_files:
+  # - "alerting_rules.yml"  # Add alerting rules here
+
+scrape_configs:
+  # OpenBAS Backend (Spring Boot Actuator)
+  - job_name: 'openbas-backend'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['backend:8080']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'jvm_.*|http_.*|openbas_.*|hikaricp_.*|logback_.*'
+        action: keep
+
+  # OpenBAS AI Service
+  - job_name: 'openbas-ai-service'
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['ai-service:8000']
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

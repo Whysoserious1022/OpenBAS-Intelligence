@@ -1,0 +1,19 @@
+# ============================================================
+# Grafana Datasource Provisioning — OpenBAS Intelligence
+# Automatically wires Prometheus as the default datasource
+# ============================================================
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    uid: prometheus-openbas
+    jsonData:
+      httpMethod: POST
+      exemplarTraceIdDestinations: []
+    version: 1
+    editable: false
+

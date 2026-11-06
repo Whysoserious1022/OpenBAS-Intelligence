@@ -1,0 +1,69 @@
+# ============================================================
+# OpenBAS Intelligence — Docker Spring Profile
+# Activated when SPRING_PROFILES_ACTIVE=docker
+#
+# Overrides defaults for containerized deployment.
+# All secrets and connection details come from environment
+# variables injected by Docker Compose or Kubernetes.
+# ============================================================
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://db:5432/openbas}
+    username: ${DB_USERNAME:openbas}
+    password: ${DB_PASSWORD:openbas_secret}
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 5
+      connection-timeout: 60000
+
+  flyway:
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    out-of-order: false
+
+# Expose all actuator endpoints in Docker (Prometheus scraping)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,loggers,env
+
+# OpenBAS overrides for Docker networking
+openbas:
+  gateway:
+    mqtt:
+      broker-url: ${MQTT_BROKER_URL:tcp://mqtt:1883}
+      username: ${MQTT_USERNAME:}
+      password: ${MQTT_PASSWORD:}
+    bacnet:
+      enabled: ${BACNET_ENABLED:false}
+    simulator:
+      enabled: true
+      telemetry-interval-ms: ${SIMULATOR_INTERVAL_MS:5000}
+
+  ai-service:
+    base-url: ${AI_SERVICE_URL:http://ai-service:8000}
+    enabled: ${AI_SERVICE_ENABLED:true}
+
+  security:
+    jwt:
+      secret: ${JWT_SECRET:CHANGE_ME_IN_PRODUCTION_USE_A_STRONG_SECRET}
+      expiration-hours: 8
+    cors:
+      allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+
+  commands:
+    live-execution-enabled: ${LIVE_EXECUTION_ENABLED:false}
+    approval-required-by-default: true
+
+logging:
+  level:
+    root: INFO
+    com.openbas: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+

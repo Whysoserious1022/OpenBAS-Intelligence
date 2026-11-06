@@ -1,0 +1,227 @@
+version: '3.9'
+
+# =============================================================================
+# OpenBAS Intelligence — Local Development Docker Compose
+# =============================================================================
+# Services:
+#   db          - PostgreSQL 16 with TimescaleDB extension
+#   mqtt        - Eclipse Mosquitto MQTT broker
+#   backend     - Spring Boot Java backend
+#   ai-service  - Python FastAPI AI service (Phase 4)
+#   simulator   - Building simulator (Phase 3)
+#   frontend    - React dashboard (Phase 6)
+#   prometheus  - Metrics collection
+#   grafana     - Metrics visualization
+#
+# Quick start:
+#   docker compose up -d db mqtt          # Start infrastructure only
+#   docker compose up -d                   # Start everything
+#
+# =============================================================================
+
+services:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Database: PostgreSQL 16 with TimescaleDB
+  # ──────────────────────────────────────────────────────────────────────────
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: openbas-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openbas
+      POSTGRES_USER: ${DB_USERNAME:-openbas}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-openbas_secret}
+      TIMESCALEDB_TELEMETRY: "off"
+    ports:
+      - "5432:5432"
+    volumes:
+      - openbas_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-openbas} -d openbas"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - openbas-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # MQTT Broker: Eclipse Mosquitto
+  # ──────────────────────────────────────────────────────────────────────────
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: openbas-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - openbas_mqtt_data:/mosquitto/data
+      - openbas_mqtt_logs:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/#' -C 1 -i health-check || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - openbas-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Backend: Spring Boot Java
+  # ──────────────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: openbas-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_URL: jdbc:postgresql://db:5432/openbas
+      DB_USERNAME: ${DB_USERNAME:-openbas}
+      DB_PASSWORD: ${DB_PASSWORD:-openbas_secret}
+      MQTT_BROKER_URL: tcp://mqtt:1883
+      AI_SERVICE_URL: http://ai-service:8000
+      JWT_SECRET: ${JWT_SECRET:-openbas-dev-secret-change-in-production-must-be-32chars}
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173,http://frontend:3000
+      LIVE_EXECUTION_ENABLED: "false"
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - openbas-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # AI Service: Python FastAPI (Phase 4 - placeholder)
+  # ──────────────────────────────────────────────────────────────────────────
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: openbas-ai
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8080
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - openbas-net
+    profiles:
+      - ai
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Building Simulator: Python (Phase 3 - placeholder)
+  # ──────────────────────────────────────────────────────────────────────────
+  simulator:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: openbas-simulator
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER_HOST: mqtt
+      MQTT_BROKER_PORT: 1883
+      BUILDING_ID: BUILDING-01
+      SIMULATION_STEP_INTERVAL_SECONDS: "5"
+      SIMULATION_SCENARIO: normal_operation
+      SIMULATION_TOTAL_STEPS: "0"
+      PUBLISH_MQTT: "true"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    networks:
+      - openbas-net
+    profiles:
+      - simulator
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Frontend: React (Phase 6 - placeholder)
+  # ──────────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: openbas-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:8080
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - openbas-net
+    profiles:
+      - frontend
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Prometheus: Metrics Collection
+  # ──────────────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: openbas-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - openbas_prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    networks:
+      - openbas-net
+    profiles:
+      - monitoring
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Grafana: Metrics Visualization
+  # ──────────────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: openbas-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - openbas_grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    depends_on:
+      - prometheus
+    networks:
+      - openbas-net
+    profiles:
+      - monitoring
+
+networks:
+  openbas-net:
+    driver: bridge
+
+volumes:
+  openbas_pgdata:
+  openbas_mqtt_data:
+  openbas_mqtt_logs:
+  openbas_prometheus_data:
+  openbas_grafana_data:

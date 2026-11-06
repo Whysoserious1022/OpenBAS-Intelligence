@@ -1,0 +1,9 @@
+# Placeholder — Grafana dashboard JSON files go here.
+# Dashboard JSON files exported from Grafana UI can be placed
+# in this directory and will be auto-provisioned on startup.
+#
+# Suggested dashboards to add:
+# - openbas_telemetry.json  — Telemetry ingestion rate, lag, quality
+# - openbas_jvm.json        — JVM heap, GC, threads (from Spring Actuator)
+# - openbas_commands.json   — Command throughput, approval latency, policy rejections
+
